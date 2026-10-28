@@ -5,40 +5,82 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/haiderali30/demo
 
 jobs:
+  # 1. Prove the change
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run lint and tests
+      - uses: actions/checkout@v4
+      - name: Lint and test
         run: make lint test
 
+  # 2. Build the image and push it, tagged with the short commit SHA
   image:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Log in only if this is NOT a pull request (Row 2 & 3: main / release tag)
-      - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+      - name: Work out tags
+        id: meta
+        run: |
+          SHORT="${GITHUB_SHA::7}"
+          TAGS="$IMAGE:$SHORT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAGS="$TAGS,$IMAGE:$GITHUB_REF_NAME"; fi
+          echo "tag=$SHORT"   >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS"   >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USER }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build the image; push only if on main or a v* tag
-      - name: Build and Push Docker Image
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ vars.DOCKERHUB_USER }}/demo:${{ github.sha }}
-            ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}/demo:{1}', vars.DOCKERHUB_USER, github.ref_name) || '' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: GIT_SHA=${{ steps.meta.outputs.tag }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # 3. Hand off to CD: commit the new tag to the GitOps repo. CI never touches the cluster.
+  deploy:
+    needs: image
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: haiderali30/demo-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+
+      - name: Bump the image tag
+        env:
+          TAG: ${{ needs.image.outputs.tag }}
+          SOURCE_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          sed -i "s|image: $IMAGE:.*|image: $IMAGE:$TAG|" app/deployment.yaml
+          git diff
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy demo $TAG" -m "From $GITHUB_REPOSITORY@$GITHUB_SHA: $SOURCE_MSG"
+          # another deploy may have landed first: rebase and retry
+          for i in 1 2 3; do git push && exit 0; git pull --rebase; done
+          exit 1

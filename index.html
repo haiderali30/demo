@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CI/CD Demo</title>
+  <style>
+    /* ---- change this colour for the demo ---- */
+    :root { --bg: #2563eb; }      /* blue */
+  </style>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid; place-items: center;
+      background: var(--bg); color: #fff;
+      font-family: system-ui, sans-serif; text-align: center;
+      transition: background .4s;
+    }
+    h1 { font-size: clamp(2.5rem, 8vw, 6rem); margin: 0 0 .5rem; }
+    p  { font-size: 1.4rem; margin: .3rem 0; opacity: .9; }
+    code { background: rgba(0,0,0,.25); padding: .15rem .5rem; border-radius: 6px; }
+  </style>
+</head>
+<body data-version="1.0.0">
+  <main>
+    <h1>Hello, ESEF!</h1>
+    <p>version <code id="version">1.0.0</code></p>
+    <p>image tag <code id="sha">__GIT_SHA__</code></p>
+  </main>
+</body>
+</html>

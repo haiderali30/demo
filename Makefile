@@ -2,8 +2,10 @@
 
 lint:
 	@echo "Running linter..."
+	@sh -n test.sh
+	@grep -qi '<!doctype html>' index.html || (echo "index.html is missing <!doctype html>"; exit 1)
 	@echo "Lint checks passed!"
 
 test:
 	@echo "Running test suite..."
-	@echo "All tests passed successfully!"
+	@sh test.sh
