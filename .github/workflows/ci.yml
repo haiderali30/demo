@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/haiderali30/demo
+  DOCKERHUB_USER: hayderrr
+  IMAGE: docker.io/hayderrr/demo
 
 jobs:
   # 1. Prove the change
@@ -24,9 +25,6 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
     steps:
@@ -41,12 +39,11 @@ jobs:
           echo "tag=$SHORT"   >> "$GITHUB_OUTPUT"
           echo "tags=$TAGS"   >> "$GITHUB_OUTPUT"
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -76,7 +73,7 @@ jobs:
           TAG: ${{ needs.image.outputs.tag }}
           SOURCE_MSG: ${{ github.event.head_commit.message }}
         run: |
-          sed -i "s|image: $IMAGE:.*|image: $IMAGE:$TAG|" app/deployment.yaml
+          sed -i "s|^\( *image:\).*|\1 $IMAGE:$TAG|" app/deployment.yaml
           git diff
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
